@@ -4,6 +4,31 @@ use std::io::prelude::*;
 use std::path::Path;
 
 
+struct RegisterFile {
+
+	// contains the 16 8-bit registers, V0-VF
+	let data_regs = [mut [mut u8, ..7], ..15];
+
+	// address register
+	let address_reg = [mut u8 ..15];
+}
+
+
+fn decode() {
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -18,14 +43,10 @@ fn main() {
         Ok(file) => file,
     };
 
+	let mut buffer = Vec::new();
+	file.read_to_end(&mut buffer);
 
-    let mut s = String::new();
-    match file.read_to_string(&mut s) {
-        Err(why) => panic!("couldn't read {} : {}", display, why),
-        Ok(file) => print!("{} contains:\n{}", display, s),
-    };
-    
-    
-
-
+	for i in 0..63 {
+		println!("{:#04x} : {:#04x}", i, buffer[i]);
+	}
 }
