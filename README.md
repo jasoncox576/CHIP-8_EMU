@@ -1,7 +1,7 @@
 # CHIP-8_EMU
 A fully-functional [CHIP-8 Emulator](https://en.wikipedia.org/wiki/CHIP-8) written in Rust. Final project for CS429H, Spring 2021 semester.
 
-CHIP-8 Emulators are widely considered to be a good intro project for those interested in making emulators for retro game consoles. As a very old virtual ISA, CHIP-8 escapes many of the complexities that emerge when working with real hardware. The CHIP-8 language itself was invented in the late 1970s in order to make it easy to write cross-platform games and programs for the various hobbyist computers of the day.
+A CHIP-8 Emulator is widely considered to be a good intro project for those interested in making emulators for retro game consoles. As a very old virtual ISA, CHIP-8 escapes many of the complexities that emerge when working with real hardware. The CHIP-8 language itself was invented in the late 1970s in order to make it easy to write cross-platform games and programs for the various hobbyist computers of the day.
 
 It has a nicely simplified virtual architecture:
 
