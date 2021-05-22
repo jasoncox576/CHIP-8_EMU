@@ -1,5 +1,9 @@
 use std::num::Wrapping;
 use rand::Rng;
+use ggez::*;
+use ggez::event::{KeyCode, KeyMods};
+use ggez::input::keyboard;
+
 
 
 
@@ -40,8 +44,8 @@ pub struct Chip {
     pub keyboard_flag : bool,
     
 
-    pub delay_timer : u8,
-    pub sound_timer : u8,
+    pub delay_timer : f32,
+    pub sound_timer : f32,
 
     pub stack_pointer : usize,
 
@@ -55,7 +59,7 @@ pub struct Chip {
 fn clear_screen(rf : &mut Chip) {
     rf.cls_flag = true;
 
-    for i in 0..2047 {
+    for i in 0..2048 {
         rf.screen_bitmap[i] = 0;
     }
 }
@@ -63,23 +67,9 @@ fn clear_screen(rf : &mut Chip) {
 
 
 
-// TODO this may be broken
-fn jump_with_v0(ins : u16) {
-    //PC = (ins & 0x0FFF) + data_regs[0];
-}
-
-
-fn draw_to_screen(ins : u16) {
-
-    
-
-}
-
 
 fn jump(pc : &mut usize, ins : u16) {
-    //println!("jmp pc before: {}", pc);
     *pc = (ins & 0x0FFF) as usize;
-    //println!("jmp pc after: {}", pc);
 }
 
 
@@ -89,7 +79,6 @@ for the characters 0 thru F
 */
 pub fn memset_sprite_data(mem : &mut [u8 ; 4096]) {
 
-    // unfortunately, there's not really a better way to encode these values.
 
     // "0"
     mem[0] = 0xF0;
@@ -214,16 +203,15 @@ pub fn memset_sprite_data(mem : &mut [u8 ; 4096]) {
 
 
 
-
-
-pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
+pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16, ctx: &Context) {
 
     rf.cls_flag = false;
     rf.draw_flag = false;
+    rf.keyboard_flag = false;
 
     let opcode : u8 = ((ins & 0xF000) >> 12) as u8;
 
-    //println!("pc: {} : {:#06x}, {:#3x}", pc, ins, opcode);
+    println!("pc: {} : {:#06x}", pc, ins);
 
 
     match opcode {
@@ -242,16 +230,16 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
             }
         },
 
-
         0x1 => jump(pc, ins),
 
         0x2 => {
 
             if rf.stack_pointer < 16 {
                 let nnn : u16 = (ins &  0x0FFF);
-                rf.stack[rf.stack_pointer] = nnn;
+                rf.stack[rf.stack_pointer] = *pc as u16;
                 *pc = nnn.into();
                 rf.stack_pointer += 1;
+                return;
             }
         }
 
@@ -284,14 +272,13 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
 
             let equal : bool = rf.data_regs[vx] == rf.data_regs[vy];
             if ((ins & 0xF) == 0) && equal {
-               *pc += *pc + 2; 
+               *pc += 2; 
             }
         }
 
         0x6 => {
             // constant-value update
             // set vx to nn
-            //println!("Constant-value update!");
             let vx : usize = ((ins & 0x0F00) >> 8) as usize;
             let nn : u8 = (ins & 0x00FF) as u8;
 
@@ -301,7 +288,6 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
         0x7 => {
             // constant-value update
             // add nn to vx
-            //println!("Adding value to register");
             let vx : usize = ((ins & 0x0F00) >> 8) as usize;
             let nn : u8 = (ins & 0x00FF) as u8;
 
@@ -339,27 +325,27 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
                 }
 
                 0x4 => {
+                    if (rf.data_regs[vy] as u16) + (rf.data_regs[vx] as u16) > 255 {
+                        rf.data_regs[15] = 1;
+                    }
+                    else {rf.data_regs[15] = 0;}
 
                     let x_wrapped = Wrapping(rf.data_regs[vx]);
                     let y_wrapped = Wrapping(rf.data_regs[vy]);
 
                     rf.data_regs[vx] = (x_wrapped + y_wrapped).0;
-                    if (rf.data_regs[vy] as u16) + (rf.data_regs[vx] as u16) > 255 {
-                        rf.data_regs[15] = 1;
-                    }
-                    else {rf.data_regs[15] = 0;}
                 }
 
                 0x5 => {
+                    if rf.data_regs[vy] > rf.data_regs[vx] {
+                        rf.data_regs[15] = 0;
+                    }
+                    else {rf.data_regs[15] = 1;}
 
                     let x_wrapped = Wrapping(rf.data_regs[vx]);
                     let y_wrapped = Wrapping(rf.data_regs[vy]);
 
                     rf.data_regs[vx] = (x_wrapped - y_wrapped).0;
-                    if rf.data_regs[vy] > rf.data_regs[vx] {
-                        rf.data_regs[15] = 0;
-                    }
-                    else {rf.data_regs[15] = 1;}
                     
 
 
@@ -377,15 +363,15 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
 
                 0x7 => {
                     // sets vx to vy - vx. vf set to 0 if borrow, 1 otherwise.
+                    if rf.data_regs[vy] < rf.data_regs[vx] {
+                        rf.data_regs[15] = 0;
+                    }
+                    else {rf.data_regs[15] = 1;}
 
                     let y_wrapped = Wrapping(rf.data_regs[vy]);
                     let x_wrapped = Wrapping(rf.data_regs[vx]);
 
                     rf.data_regs[vx] = (y_wrapped - x_wrapped).0;
-                    if rf.data_regs[vy] < rf.data_regs[vx] {
-                        rf.data_regs[15] = 0;
-                    }
-                    else {rf.data_regs[15] = 1;}
                 }
 
                 // NOTE: ambiguous instruction depending on choice of implementation
@@ -393,7 +379,7 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
                     // NOTE: Comment out this line depending on
                     // whether or not your program needs it.
                     //rf.data_regs[vx] = rf.data_regs[vy];
-                    rf.data_regs[15] = 0b10000000 & rf.data_regs[vx];
+                    rf.data_regs[15] = (0b10000000 & rf.data_regs[vx]) >> 7;
                     rf.data_regs[vx] = rf.data_regs[vx] << 1;
                 }
 
@@ -417,7 +403,7 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
                 let vy : usize = ((ins & 0x00F0) >> 4) as usize;
 
                 // skips the next instruction if vx != vy
-                if vx != vy {
+                if rf.data_regs[vx] != rf.data_regs[vy] {
                     *pc += 2;
                 }
             }
@@ -464,14 +450,16 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
 
             let x = (rf.data_regs[vx] % 64);
             let y = (rf.data_regs[vy] % 32);
+            
+            rf.data_regs[15] = 0;
 
-            println!("x: {}, y: {}", x,y);
+            //println!("x: {}, y: {}", x,y);
             
             let mut pixels_turned_off : bool = false;
 
             let start_address : usize = rf.address_reg as usize;
 
-            for row in 0..(n) {
+            for row in 0..n {
                 for col in 0..8 {
                     if ((x+col) > 63) || ((y + row) > 31) {
                         break; 
@@ -489,24 +477,18 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
                     // TODO this is messy, fix.
 
                     let old_val = rf.screen_bitmap[screen_idx];
-                    rf.screen_bitmap[screen_idx] = rf.screen_bitmap[screen_idx] ^ (bit & rf.memory[offset_address]);
+
+                    let mut sprite_val = 0;
+                    if (bit & rf.memory[offset_address]) > 0 {
+                        sprite_val = 255;
+                    }
+
+                    rf.screen_bitmap[screen_idx] = rf.screen_bitmap[screen_idx] ^ sprite_val;
                     let new_val = rf.screen_bitmap[screen_idx];
 
                     if new_val < old_val {
                         pixels_turned_off = true;
-                        println!("pixels turned off");
                     }
-
-                    /*
-
-                    if(rf.screen_bitmap[screen_idx] == 0) {
-                        rf.screen_bitmap[screen_idx] = (bit & rf.memory[offset_address]);
-                    }
-                    else {
-                        rf.screen_bitmap[screen_idx] = 0; 
-                        pixels_turned_off = true;
-                    }
-                    */
                 }
             }
             
@@ -515,13 +497,26 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
                 rf.data_regs[15] = 1;
             }
 
-            println!("Drawing on screen");
+            //println!("Drawing on screen");
     
         },
 
         0xE => {
+            
+            let xop : u8 = (ins & 0x00FF) as u8;
 
-
+            match xop {
+            
+                // skips next instruction if pressed keycode == contents of vx
+                0x9E => {
+                    // nothing here
+                }
+                // skips if opposite of above
+                0xA1 => {
+                    // nothing here
+                }
+                _ => println!("Invalid instruction!"),
+            }
         }
 
         0xF => {
@@ -533,12 +528,16 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
                 // sets vx to delay timer value
                 0x07 => {
                     let vx : usize = ((ins & 0x0F00) >> 8) as usize;
-                    rf.data_regs[vx] = rf.delay_timer;
+                    rf.data_regs[vx] = rf.delay_timer.round() as u8;
                 }
 
+                // gets next keypress and stores in vx
                 0x0A => {
+                    /*
                     let vx : usize = ((ins & 0x0F00) >> 8) as usize;
-                    rf.data_regs[vx] = rf.delay_timer;
+                    let keycode = get_keypress(ctx, true);
+                    rf.data_regs[vx] = keycode;
+                    */
                     rf.keyboard_flag = true;
                     return;
                 }
@@ -547,13 +546,13 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
                 // sets delay timer to val in vx
                 0x15 => {
                     let vx : usize = ((ins & 0x0F00) >> 8) as usize;
-                    rf.delay_timer = rf.data_regs[vx];
+                    rf.delay_timer = rf.data_regs[vx] as f32;
                 }
 
                 // sets sound timer to value in vx
                 0x18 => {
                     let vx : usize = ((ins & 0x0F00) >> 8) as usize;
-                    rf.sound_timer = rf.data_regs[vx];
+                    rf.sound_timer = rf.data_regs[vx] as f32;
                 }
 
                 // increments address register by value in vx
@@ -619,17 +618,6 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
 
         }
 
-
-
-
-
-
-
-
-
-
-
-
         _ => println!("ERR: unknown instruction! {:#06x} ", ins)
     }
 
@@ -638,7 +626,7 @@ pub fn decode(rf : &mut Chip, pc : &mut usize, ins: u16) {
 
     // TODO only increment pc if there wasn't a jump
 
-    if !(opcode == 0x1) {*pc = *pc + 2};
+    if !(opcode == 0x1) {*pc += 2};
 
 }
 

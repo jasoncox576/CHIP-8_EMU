@@ -3,6 +3,7 @@ name = "real_chip8"
 version = "0.1.0"
 authors = ["jason"]
 edition = "2018"
+include = ["sounds/beep.wav"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
